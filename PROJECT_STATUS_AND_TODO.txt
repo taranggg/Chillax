@@ -2,49 +2,53 @@
 
 ## What Has Been Done
 
-1. **WebSocket Connection Fixed**
-   - Backend (Node.js/Socket.IO) and frontend (React/Vite) servers are running and connect properly.
+1. **Realtime Core Stable**
+   - Frontend (React/Vite) and backend (Express/Socket.IO) connect reliably.
+   - Room creation/join flows return acknowledgements and hydrate participants/messages.
 
-2. **Room Creation & Joining**
-   - Users can create and join rooms.
-   - Backend and frontend communicate via Socket.IO events.
+2. **Chat + Presence**
+   - Message schema normalized; all clients see messages as they arrive.
+   - Participant list updates on join/leave and reflects live media-state toggles.
 
-3. **Chat Functionality**
-   - Fixed message field mismatches (`message` vs `content`).
-   - Real-time chat implemented: users can send and receive messages.
-   - Messages display immediately for the sender.
+3. **WebRTC Calls**
+   - SimplePeer signalling routed through Socket.IO.
+   - Local/remote streams render with mute/camera controls.
 
-4. **User ID Synchronization**
-   - Frontend now uses `socket.id` (from backend) as the user identifier.
-   - All message and participant logic updated to use `socket.id`.
+4. **Video Sync**
+   - ReactPlayer integrated with discrete `video-play/pause/seek/sync` events.
+   - Host-only controls broadcast state; manual sync button re-aligns everyone.
 
-5. **Debugging & Logging**
-   - Console logs added to trace message flow and user ID comparisons.
+5. **Local Uploads + YouTube**
+   - Hosts can paste streaming links or upload MP4/WebM files (served via `/uploads`).
+
+6. **Documentation Refresh**
+   - Root README, backend guide, and setup docs updated for the current feature set.
 
 ## Current Issues / Pending Work
 
-1. **Participant Count**
-   - Sometimes only 1 participant is shown, even if multiple users are in the room.
-   - Needs investigation: check how participant list is updated on frontend and how backend emits participant data.
+1. **Multi-User QA**
+   - Run extended tests with 3+ clients (desktop/mobile/incognito) to watch for desync or stale participants.
 
-2. **Message Visibility**
-   - Previously, users only saw their own messages due to user ID mismatch.
-   - This should now be fixed, but needs to be tested with multiple users.
+2. **Upload Hardening**
+   - Enforce MIME/extension checks, consider virus scanning, and surface upload progress/errors in UI.
 
-3. **Testing Needed**
-   - Open multiple browser windows/tabs, join the same room, and send messages.
-   - Confirm all users see each other's messages and participant list updates correctly.
+3. **Video Playback Reliability**
+   - Player sometimes remains on the loading spinner; reproduce and fix so streams start consistently for all users.
+
+4. **Autoplay UX**
+   - Investigate browser autoplay prompts and provide clearer cues when manual play is required.
+
+5. **Session Persistence**
+   - Rooms/users are in-memory only; evaluate Redis or database backing for production longevity.
 
 ## What To Do Next
 
-- [ ] Test chat and participant list with multiple users (browsers/tabs).
-- [ ] Debug and fix participant count if still incorrect.
-- [ ] Refactor code for clarity and maintainability (optional, after core features work).
-- [ ] Add user-friendly error handling (e.g., for failed connections or room joins).
-- [ ] Implement user authentication (optional, for real-world use).
-- [ ] Add video/audio streaming functionality (if not already done).
-- [ ] Write unit/integration tests for critical logic.
-- [ ] Update documentation (README, setup instructions, usage guide).
+- [ ] Conduct a full multi-client regression pass (chat, video sync, WebRTC, uploads).
+- [ ] Add upload validation + size feedback and surface errors inline.
+- [ ] Improve UX around autoplay (tooltips, prompt to press play).
+- [ ] Wire basic auth/identity (even lightweight name prompt persistence).
+- [ ] Add unit/integration tests for socket handlers and React hooks.
+- [ ] Prepare production deployment notes (HTTPS, scaling, file storage strategy).
 
 ---
 

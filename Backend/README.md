@@ -6,18 +6,23 @@ A Node.js backend server for the Chill Together synchronized video watching appl
 
 - **Real-time Communication**: Socket.IO for instant messaging and video synchronization
 - **Room Management**: Create and join rooms with unique IDs
-- **Video Synchronization**: Play, pause, seek, and URL changes synced across all participants
+- **Video Synchronization**: Play, pause, seek, URL changes, and explicit sync broadcasts
 - **Chat System**: Real-time messaging within rooms
 - **WebRTC Signaling**: Peer-to-peer video/audio call support
 - **Participant Management**: Track online users, audio/video status
-- **Host Controls**: Room host can control video and manage participants
+- **Host Controls**: Room host can load remote videos or upload local files for the room
+- **File Uploads**: Optional `/upload` endpoint stores media in `uploads/`
 
 ## API Endpoints
 
 ### REST API
-- `GET /health` - Health check endpoint
-- `GET /rooms` - List all active rooms
-- `GET /rooms/:roomId` - Get specific room information
+
+| Method | Endpoint        | Description                               |
+|--------|-----------------|-------------------------------------------|
+| GET    | `/health`        | Health check endpoint                     |
+| GET    | `/rooms`         | List all active rooms                     |
+| GET    | `/rooms/:roomId` | Get specific room information             |
+| POST   | `/upload`        | Upload and host a local video file        |
 
 ### Socket.IO Events
 
@@ -28,23 +33,24 @@ A Node.js backend server for the Chill Together synchronized video watching appl
 - `user-left` - Notification when user leaves
 
 #### Video Synchronization
+- `video-url-change` - Host broadcasts a new source URL
 - `video-play` - Play video for all participants
 - `video-pause` - Pause video for all participants
-- `video-seek` - Seek to specific time
-- `video-url-change` - Change video URL (host only)
+- `video-seek` - Seek to a specific moment
+- `video-sync` - Broadcast the authoritative time/play state
 
 #### Chat
 - `send-message` - Send chat message
 - `new-message` - Receive new message
 
 #### WebRTC Signaling
-- `webrtc-offer` - WebRTC offer exchange
-- `webrtc-answer` - WebRTC answer exchange
-- `webrtc-ice-candidate` - ICE candidate exchange
+- `webrtc-signal` - Unified simple-peer signalling bus
+- `webrtc-offer` / `webrtc-answer` / `webrtc-ice-candidate` *(legacy helpers, optional)*
 
 #### Media Controls
-- `toggle-audio` - Toggle user's audio
-- `toggle-video` - Toggle user's video
+- `media-status-update` - Broadcast current audio/video state
+- `toggle-audio` - (Legacy) Toggle user's audio
+- `toggle-video` - (Legacy) Toggle user's video
 
 ## Installation
 
@@ -71,9 +77,12 @@ npm start
 
 ## Environment Variables
 
-- `PORT` - Server port (default: 3001)
-- `FRONTEND_URL` - Frontend URL for CORS (default: http://localhost:5173)
-- `NODE_ENV` - Environment (development/production)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | HTTP listen port | `3001` |
+| `FRONTEND_URL` | Allowed origin for CORS | `http://localhost:5173` |
+| `BACKEND_PUBLIC_URL` | Public origin used when returning uploaded file URLs | `http://localhost:3001` |
+| `NODE_ENV` | Environment flag | `development` |
 
 ## Room Structure
 
@@ -98,11 +107,11 @@ Each participant has:
 ## Error Handling
 
 The server handles:
-- Invalid room IDs
-- Disconnected users
-- Host transfers when host leaves
-- Room cleanup when empty
-- Message limits and validation
+- Invalid room IDs and duplicate creates
+- Graceful cleanup when users disconnect
+- Host transfer / room deletion when the host leaves
+- Automatic trimming of chat history (last 100 messages)
+- File size validation during uploads (default 1 GB)
 
 ## Development
 

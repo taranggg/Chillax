@@ -9,7 +9,8 @@ A real-time synchronized video watching application where multiple users can joi
 - **💬 Real-time Chat**: Instant messaging within rooms
 - **📹 Video Calls**: WebRTC-powered video and voice calls
 - **👥 User Management**: See who's online and their media status
-- **🎛️ Host Controls**: Room creators have additional privileges
+- **🎛️ Host Controls**: Room creators can load YouTube links or upload local videos for everyone
+- **📂 Local Uploads**: Hosts can upload MP4/WebM files that are streamed directly from the backend
 - **📱 Responsive Design**: Works on desktop and mobile devices
 
 ## 🛠️ Tech Stack
@@ -67,18 +68,18 @@ Frontend will run on: http://localhost:5173 (or next available port)
 ## 🎮 How to Use
 
 1. **Create a Room:**
-   - Enter your name on the homepage
-   - Click "Create Room"
+   - Click **Create Room** (a random room ID is generated automatically)
    - Share the room ID with friends
 
 2. **Join a Room:**
-   - Enter your name and the room ID
-   - Click "Join Room"
+   - Enter the room ID you received
+   - Click **Join Room**
 
 3. **Watch Videos Together:**
-   - Host can paste YouTube URLs or direct video links
-   - All participants see the same video in sync
-   - Play, pause, and seek controls affect everyone
+   - Only the host sees the **Load URL** and **Upload Local** controls
+   - Paste a YouTube URL or direct link and click **Load URL**
+   - Or click **Upload Local** to push an MP4/WebM file from your machine (1 GB default limit)
+   - Play, pause, seek, or press **Sync All** to broadcast the current state to every participant
 
 4. **Chat:**
    - Use the chat panel to communicate
@@ -87,6 +88,8 @@ Frontend will run on: http://localhost:5173 (or next available port)
 5. **Video Calls:**
    - Click the camera/microphone buttons to join video calls
    - WebRTC enables peer-to-peer communication
+
+> ℹ️ Browsers often block autoplay with sound. If a new video appears paused, the host can click the play button once to start playback for everyone.
 
 ## 📁 Project Structure
 
@@ -113,36 +116,48 @@ Chill-Together/
 ## 🔧 Configuration
 
 ### Backend Environment Variables
-Create `.env` file in the Backend directory:
+Create `.env` inside `Backend/`:
+
 ```env
 PORT=3001
 FRONTEND_URL=http://localhost:5173
-NODE_ENV=development
+# Public origin used when returning uploaded file URLs
+BACKEND_PUBLIC_URL=http://localhost:3001
 ```
 
+Adjust `BACKEND_PUBLIC_URL` when deploying behind a domain/HTTPS proxy.
+
 ### Frontend Configuration
-The frontend automatically connects to `http://localhost:3001` for the backend.
+The frontend reads the socket/API origin from `src/utils/constants.js` (defaults to `http://localhost:3001`). Update this file for production builds if needed.
 
 ## 🌐 API Endpoints
 
 ### REST API
-- `GET /health` - Server health check
-- `GET /rooms` - List all active rooms
-- `GET /rooms/:roomId` - Get room information
+
+| Method | Endpoint          | Description                               |
+|--------|-------------------|-------------------------------------------|
+| GET    | `/health`          | Basic health check                        |
+| GET    | `/rooms`           | List active rooms                         |
+| GET    | `/rooms/:roomId`   | Inspect a specific room                   |
+| POST   | `/upload`          | Upload a local video (host use only)      |
+
+Uploaded assets are served at `/uploads/<filename>`.
 
 ### Socket.IO Events
-- **Room Management**: `create-room`, `join-room`, `user-joined`, `user-left`
-- **Video Sync**: `video-play`, `video-pause`, `video-seek`, `video-url-change`
+
+- **Room Management**: `create-room`, `join-room`, `user-joined`, `user-left`, `participants-update`
+- **Video Sync**: `video-url-change`, `video-play`, `video-pause`, `video-seek`, `video-sync`
 - **Chat**: `send-message`, `new-message`
-- **WebRTC**: `webrtc-offer`, `webrtc-answer`, `webrtc-ice-candidate`
-- **Media**: `toggle-audio`, `toggle-video`
+- **WebRTC**: `webrtc-signal`
+- **Media Status**: `media-status-update`
 
 ## 🔍 Supported Video Formats
 
 - **YouTube** (`youtube.com`, `youtu.be`)
 - **Vimeo** (`vimeo.com`)
 - **Direct video files** (`.mp4`, `.webm`, `.ogg`)
-- **And more** (via React Player)
+- **Locally uploaded files** (served from `/uploads/...`)
+- **And more** (via React Player support)
 
 ## 🐛 Troubleshooting
 
@@ -152,16 +167,22 @@ The frontend automatically connects to `http://localhost:3001` for the backend.
    - Backend: Change `PORT` in `.env` file
    - Frontend: Vite will automatically find next available port
 
-2. **CORS errors:**
-   - Ensure backend CORS is configured for your frontend URL
-   - Check that both servers are running
+2. **Video stuck on “Loading”:**
+   - Make sure the host clicked **Load URL** after pasting a link
+   - Wait for the spinner to disappear; autoplay may require a manual play click
+   - Inspect the browser console for ReactPlayer errors (invalid URL, blocked content, etc.)
 
-3. **WebRTC connection issues:**
+3. **CORS errors:**
+   - Ensure backend CORS matches your frontend origin (`FRONTEND_URL`)
+   - Check both servers are running
+
+4. **WebRTC connection issues:**
    - Ensure HTTPS in production (required for camera/microphone access)
    - Check firewall settings for peer-to-peer connections
 
-4. **Video not syncing:**
+5. **Video not syncing:**
    - Verify Socket.IO connection in browser dev tools
+   - Click **Sync All** to broadcast the current state
    - Check network connectivity
 
 ## 🚀 Deployment
