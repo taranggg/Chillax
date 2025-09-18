@@ -10,9 +10,11 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
   const [hasShownConnectionError, setHasShownConnectionError] = useState(false)
   const currentUserRef = useRef(null)
   const roomCreatedRef = useRef(false)
+  const [roomState, setRoomState] = useState({ currentVideo: null })
 
   useEffect(() => {
     roomCreatedRef.current = false
+    setRoomState({ currentVideo: null })
   }, [roomId])
 
   useEffect(() => {
@@ -34,6 +36,13 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
           audioEnabled: participant.audioEnabled ?? false,
           videoEnabled: participant.videoEnabled ?? false
         })))
+      }
+
+      if (roomData.currentVideo) {
+        setRoomState(prev => ({
+          ...prev,
+          currentVideo: roomData.currentVideo
+        }))
       }
 
       if (Array.isArray(roomData.messages)) {
@@ -187,6 +196,18 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
       })))
     })
 
+    newSocket.on('video-url-changed', (data) => {
+      setRoomState(prev => ({
+        ...prev,
+        currentVideo: {
+          ...prev.currentVideo,
+          url: data.url,
+          currentTime: data.currentTime,
+          isPlaying: data.isPlaying
+        }
+      }))
+    })
+
     // Handle chat messages
     newSocket.on('new-message', (data) => {
       console.log('Received message:', data) // Debug log
@@ -287,6 +308,7 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
     sendMessage,
     updateMediaStatus,
     isConnected,
-    currentUser: currentUserRef.current
+    currentUser: currentUserRef.current,
+    roomState
   }
 }

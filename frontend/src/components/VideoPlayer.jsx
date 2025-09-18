@@ -5,69 +5,118 @@ import { Play, Pause, Volume2, VolumeX } from 'lucide-react'
 const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
   const playerRef = useRef(null)
   const [playing, setPlaying] = useState(false)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMuted] = useState(true)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [seeking, setSeeking] = useState(false)
   const [volume, setVolume] = useState(0.8)
+  const [isReady, setIsReady] = useState(false)
   
   // Track if we should ignore the next play/pause (to prevent loops)
   const ignoringRemoteUpdate = useRef(false)
+
+  useEffect(() => {
+    setIsReady(false)
+    setDuration(0)
+    setProgress(0)
+  }, [url])
 
   // Listen for remote video actions from other participants
   useEffect(() => {
     if (!socket) return
 
-    const handleVideoAction = (data) => {
-      if (data.roomId !== roomId) return
-
+    const beginIgnoreWindow = () => {
       ignoringRemoteUpdate.current = true
-      
-      switch (data.action) {
-        case 'play':
-          setPlaying(true)
-          if (playerRef.current && data.data.currentTime) {
-            playerRef.current.seekTo(data.data.currentTime)
-          }
-          break
-        case 'pause':
-          setPlaying(false)
-          break
-        case 'seek':
-          if (playerRef.current) {
-            playerRef.current.seekTo(data.data.seekTime)
-          }
-          break
-        case 'sync':
-          // Sync both time and play state
-          if (playerRef.current) {
-            playerRef.current.seekTo(data.data.currentTime)
-            setPlaying(data.data.playing)
-          }
-          break
-      }
-
       setTimeout(() => {
         ignoringRemoteUpdate.current = false
       }, 500)
     }
 
+    const handleRemotePlay = (data) => {
+      if (data.roomId !== roomId) return
+      beginIgnoreWindow()
+      setPlaying(true)
+      const newTime = data.currentTime ?? 0
+      if (playerRef.current) {
+        playerRef.current.seekTo(newTime)
+      }
+      if (duration > 0) {
+        setProgress(newTime / duration)
+      } else {
+        setProgress(0)
+      }
+      setIsReady(true)
+    }
+
+    const handleRemotePause = (data) => {
+      if (data.roomId !== roomId) return
+      beginIgnoreWindow()
+      setPlaying(false)
+      const newTime = data.currentTime ?? playerRef.current?.getCurrentTime?.() ?? 0
+      if (playerRef.current) {
+        playerRef.current.seekTo(newTime)
+      }
+      if (duration > 0) {
+        setProgress(newTime / duration)
+      } else {
+        setProgress(0)
+      }
+      setIsReady(true)
+    }
+
+    const handleRemoteSeek = (data) => {
+      if (data.roomId !== roomId) return
+      beginIgnoreWindow()
+      if (playerRef.current) {
+        playerRef.current.seekTo(data.currentTime ?? 0)
+      }
+      const newTime = data.currentTime ?? 0
+      if (duration > 0) {
+        setProgress(newTime / duration)
+      } else {
+        setProgress(0)
+      }
+      setIsReady(true)
+    }
+
+    const handleRemoteSync = (data) => {
+      if (data.roomId !== roomId) return
+      beginIgnoreWindow()
+      if (playerRef.current) {
+        playerRef.current.seekTo(data.currentTime ?? 0)
+      }
+      if (duration > 0) {
+        setProgress((data.currentTime ?? 0) / duration)
+      } else {
+        setProgress(0)
+      }
+      setPlaying(!!data.playing)
+      setIsReady(true)
+    }
+
     const handleVideoChange = (data) => {
       if (data.roomId === roomId) {
-        // Reset player state when video changes
         setPlaying(false)
         setProgress(0)
+        setDuration(0)
+        setIsReady(false)
       }
     }
 
-    socket.on('video-action', handleVideoAction)
-    socket.on('video-change', handleVideoChange)
+    socket.on('video-play', handleRemotePlay)
+    socket.on('video-pause', handleRemotePause)
+    socket.on('video-seek', handleRemoteSeek)
+    socket.on('video-sync', handleRemoteSync)
+    socket.on('video-url-changed', handleVideoChange)
 
     return () => {
-      socket.off('video-action', handleVideoAction)
-      socket.off('video-change', handleVideoChange)
+      socket.off('video-play', handleRemotePlay)
+      socket.off('video-pause', handleRemotePause)
+      socket.off('video-seek', handleRemoteSeek)
+      socket.off('video-sync', handleRemoteSync)
+      socket.off('video-url-changed', handleVideoChange)
     }
-  }, [socket, roomId])
+  }, [socket, roomId, duration])
 
   // Handle play/pause
   const handlePlayPause = () => {
@@ -97,6 +146,10 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
     ) {
       setDuration(playerDuration)
     }
+
+    if (!isReady) {
+      setIsReady(true)
+    }
   }
 
   // Handle seek
@@ -114,7 +167,7 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
     const seekTime = parseFloat(e.target.value)
     if (playerRef.current) {
       playerRef.current.seekTo(seekTime)
-      onVideoAction('seek', { seekTime })
+      onVideoAction('seek', { seekTime: seekTime * duration })
     }
   }
 
@@ -147,6 +200,16 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
           width="100%"
           height="100%"
           onProgress={handleProgress}
+          onReady={() => {
+            const playerDuration = playerRef.current?.getDuration?.()
+            if (
+              playerDuration &&
+              !Number.isNaN(playerDuration)
+            ) {
+              setDuration(playerDuration)
+            }
+            setIsReady(true)
+          }}
           onPlay={() => {
             if (!ignoringRemoteUpdate.current) {
               setPlaying(true)
@@ -269,7 +332,7 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
       </div>
 
       {/* Loading State */}
-      {url && !duration && (
+      {url && !isReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="flex flex-col items-center space-y-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>

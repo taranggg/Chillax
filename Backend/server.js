@@ -2,6 +2,10 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
@@ -9,6 +13,34 @@ dotenv.config();
 
 const app = express();
 const server = createServer(app);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname) || '';
+    const safeBaseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_');
+    cb(null, `${safeBaseName}-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    // 1 GB limit – adjust if needed
+    fileSize: 1024 * 1024 * 1024
+  }
+});
 const io = new Server(server, {
   cors: {
     origin: [
@@ -31,6 +63,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use('/uploads', express.static(uploadsDir));
 
 // In-memory storage (in production, use Redis or database)
 const rooms = new Map();
@@ -113,6 +146,20 @@ app.get('/rooms/:roomId', (req, res) => {
     participantCount: room.participants.size,
     currentVideo: room.currentVideo,
     createdAt: room.createdAt
+  });
+});
+
+app.post('/upload', upload.single('video'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const fileUrl = `${process.env.BACKEND_PUBLIC_URL || `http://localhost:${PORT}`}/uploads/${req.file.filename}`;
+
+  res.json({
+    url: fileUrl,
+    originalName: req.file.originalname,
+    size: req.file.size
   });
 });
 
@@ -228,6 +275,7 @@ io.on('connection', (socket) => {
     });
 
     socket.to(user.roomId).emit('video-play', {
+      roomId: user.roomId,
       currentTime: data.currentTime,
       timestamp: Date.now()
     });
@@ -248,6 +296,7 @@ io.on('connection', (socket) => {
     });
 
     socket.to(user.roomId).emit('video-pause', {
+      roomId: user.roomId,
       currentTime: data.currentTime,
       timestamp: Date.now()
     });
@@ -267,6 +316,7 @@ io.on('connection', (socket) => {
     });
 
     socket.to(user.roomId).emit('video-seek', {
+      roomId: user.roomId,
       currentTime: data.currentTime,
       timestamp: Date.now()
     });
@@ -288,6 +338,7 @@ io.on('connection', (socket) => {
     });
 
     io.to(user.roomId).emit('video-url-changed', {
+      roomId: user.roomId,
       url: data.url,
       currentTime: 0,
       isPlaying: false
@@ -322,7 +373,48 @@ io.on('connection', (socket) => {
     console.log(`Message from ${user.name} in room ${user.roomId}: ${data.content}`);
   });
 
+  // Simple-Peer signaling
+  socket.on('webrtc-signal', (data) => {
+    const sender = users.get(socket.id);
+    if (!sender) return;
+
+    const room = rooms.get(sender.roomId);
+    if (!room) return;
+
+    if (!data?.to) return;
+
+    socket.to(data.to).emit('webrtc-signal', {
+      roomId: room.id,
+      signal: data.signal,
+      from: sender.id,
+      fromName: sender.name,
+      to: data.to
+    });
+  });
+
   // WebRTC signaling
+  socket.on('video-sync', (data) => {
+    const user = users.get(socket.id);
+    if (!user) return;
+
+    const room = rooms.get(user.roomId);
+    if (!room) return;
+
+    room.updateVideo({
+      currentTime: data.currentTime ?? 0,
+      isPlaying: !!data.playing
+    });
+
+    io.to(user.roomId).emit('video-sync', {
+      roomId: user.roomId,
+      currentTime: data.currentTime ?? 0,
+      playing: !!data.playing,
+      timestamp: Date.now()
+    });
+
+    console.log(`Video sync requested in room ${user.roomId}`);
+  });
+
   socket.on('webrtc-offer', (data) => {
     socket.to(data.targetId).emit('webrtc-offer', {
       offer: data.offer,
@@ -341,6 +433,30 @@ io.on('connection', (socket) => {
     socket.to(data.targetId).emit('webrtc-ice-candidate', {
       candidate: data.candidate,
       fromId: socket.id
+    });
+  });
+
+  socket.on('media-status-update', (data) => {
+    const user = users.get(socket.id);
+    if (!user) return;
+
+    const room = rooms.get(user.roomId);
+    if (!room) return;
+
+    const audioEnabled = data.audioEnabled ?? false;
+    const videoEnabled = data.videoEnabled ?? false;
+
+    room.updateParticipant(user.id, {
+      audioEnabled,
+      videoEnabled,
+      isOnline: true
+    });
+
+    socket.to(user.roomId).emit('media-status-update', {
+      roomId: user.roomId,
+      userId: user.id,
+      audioEnabled,
+      videoEnabled
     });
   });
 

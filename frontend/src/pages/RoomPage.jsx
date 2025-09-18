@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LogOut, Copy, Check } from 'lucide-react'
 import VideoPlayer from '../components/VideoPlayer'
 import ChatBox from '../components/ChatBox'
@@ -6,10 +6,14 @@ import VideoCall from '../components/VideoCall'
 import ParticipantsList from '../components/ParticipantsList'
 import { useSocket } from '../hooks/useSocket'
 import { useWebRTC } from '../hooks/useWebRTC'
+import { API_BASE_URL } from '../utils/constants'
 
 const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
   const [videoUrl, setVideoUrl] = useState('https://www.youtube.com/watch?v=dQw4w9WgXcQ') // Default video
   const [copied, setCopied] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
+  const fileInputRef = useRef(null)
   
   // Socket connection for real-time sync and chat
   const { 
@@ -17,7 +21,8 @@ const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
     participants, 
     messages, 
     sendMessage, 
-    isConnected 
+    isConnected,
+    roomState
   } = useSocket(roomId, isCreator)
 
   // WebRTC for video/audio calls
@@ -28,7 +33,16 @@ const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
     toggleAudio,
     isVideoEnabled,
     isAudioEnabled
-  } = useWebRTC(socket, roomId)
+  } = useWebRTC(socket, roomId, participants)
+
+  const currentParticipant = useMemo(() => participants.find(p => p.isYou), [participants])
+  const canControlVideo = !!(currentParticipant?.isHost ?? isCreator)
+
+  useEffect(() => {
+    if (roomState.currentVideo && typeof roomState.currentVideo.url === 'string') {
+      setVideoUrl(roomState.currentVideo.url)
+    }
+  }, [roomState.currentVideo])
 
   // Copy room ID to clipboard
   const copyRoomId = async () => {
@@ -44,21 +58,80 @@ const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
   // Handle video URL change
   const handleVideoUrlChange = (newUrl) => {
     setVideoUrl(newUrl)
-    // Emit video change to other participants
-    if (socket) {
-      socket.emit('video-change', { url: newUrl, roomId })
+  }
+
+  const handleVideoUrlSubmit = (event) => {
+    event.preventDefault()
+    if (!socket || !canControlVideo) return
+
+    const trimmedUrl = videoUrl?.trim()
+    if (!trimmedUrl) return
+
+    setUploadError(null)
+    socket.emit('video-url-change', { url: trimmedUrl, roomId })
+  }
+
+  const handleVideoEvent = (action, data) => {
+    if (!socket) return
+
+    switch (action) {
+      case 'play':
+        socket.emit('video-play', { roomId, currentTime: data.currentTime })
+        break
+      case 'pause':
+        socket.emit('video-pause', { roomId, currentTime: data.currentTime })
+        break
+      case 'seek':
+        socket.emit('video-seek', { roomId, currentTime: data.seekTime })
+        break
+      case 'sync':
+        socket.emit('video-sync', { roomId, currentTime: data.currentTime, playing: data.playing })
+        break
+      default:
+        break
     }
   }
 
-  // Handle video sync events
-  const handleVideoSync = (action, data) => {
-    if (socket) {
-      socket.emit('video-action', {
-        action,
-        data,
-        roomId,
-        timestamp: Date.now()
+  const handleOpenFileDialog = () => {
+    if (!canControlVideo) return
+    fileInputRef.current?.click()
+  }
+
+  const handleLocalFileSelected = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file || !socket || !canControlVideo) {
+      return
+    }
+
+    setUploadError(null)
+    setIsUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('video', file)
+
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        body: formData
       })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody.error || 'Failed to upload video')
+      }
+
+      const result = await response.json()
+      if (result.url) {
+        setVideoUrl(result.url)
+        socket.emit('video-url-change', { url: result.url, roomId })
+      }
+    } catch (error) {
+      console.error('Video upload failed:', error)
+      setUploadError(error.message)
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -137,15 +210,41 @@ const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
         <div className="flex-1 flex flex-col min-h-0">
           {/* Video URL Input */}
           <div className="bg-gray-800 p-4 md:p-6 border-b border-gray-700 flex-shrink-0">
-            <div className="flex space-x-3">
+            <form className="flex space-x-3" onSubmit={handleVideoUrlSubmit}>
               <input
                 type="url"
                 placeholder="Paste YouTube/video URL here..."
                 value={videoUrl}
                 onChange={(e) => handleVideoUrlChange(e.target.value)}
+                disabled={!canControlVideo}
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 md:px-5 py-3 md:py-4 text-sm md:text-base text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
-            </div>
+              <button
+                type="submit"
+                disabled={!canControlVideo}
+                className="px-4 md:px-5 py-3 md:py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm md:text-base font-medium transition-colors"
+              >
+                Load URL
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenFileDialog}
+                disabled={!canControlVideo || isUploading}
+                className="px-4 md:px-5 py-3 md:py-4 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm md:text-base font-medium transition-colors"
+              >
+                {isUploading ? 'Uploading...' : 'Upload Local'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleLocalFileSelected}
+              />
+            </form>
+            {uploadError && (
+              <p className="mt-2 text-sm text-red-400">{uploadError}</p>
+            )}
           </div>
 
           {/* Video Player */}
@@ -154,7 +253,7 @@ const RoomPage = ({ roomId, isCreator = false, onLeaveRoom }) => {
               url={videoUrl}
               socket={socket}
               roomId={roomId}
-              onVideoAction={handleVideoSync}
+              onVideoAction={handleVideoEvent}
             />
           </div>
 

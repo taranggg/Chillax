@@ -1,6 +1,8 @@
 // Socket.IO configuration
 export const SOCKET_SERVER_URL = 'http://localhost:3001'
 
+export const API_BASE_URL = SOCKET_SERVER_URL
+
 // WebRTC configuration
 export const WEBRTC_CONFIG = {
   iceServers: [
