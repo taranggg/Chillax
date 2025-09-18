@@ -1,0 +1,54 @@
+# Project Progress & TODO Summary
+
+## What Has Been Done
+
+1. **WebSocket Connection Fixed**
+   - Backend (Node.js/Socket.IO) and frontend (React/Vite) servers are running and connect properly.
+
+2. **Room Creation & Joining**
+   - Users can create and join rooms.
+   - Backend and frontend communicate via Socket.IO events.
+
+3. **Chat Functionality**
+   - Fixed message field mismatches (`message` vs `content`).
+   - Real-time chat implemented: users can send and receive messages.
+   - Messages display immediately for the sender.
+
+4. **User ID Synchronization**
+   - Frontend now uses `socket.id` (from backend) as the user identifier.
+   - All message and participant logic updated to use `socket.id`.
+
+5. **Debugging & Logging**
+   - Console logs added to trace message flow and user ID comparisons.
+
+## Current Issues / Pending Work
+
+1. **Participant Count**
+   - Sometimes only 1 participant is shown, even if multiple users are in the room.
+   - Needs investigation: check how participant list is updated on frontend and how backend emits participant data.
+
+2. **Message Visibility**
+   - Previously, users only saw their own messages due to user ID mismatch.
+   - This should now be fixed, but needs to be tested with multiple users.
+
+3. **Testing Needed**
+   - Open multiple browser windows/tabs, join the same room, and send messages.
+   - Confirm all users see each other's messages and participant list updates correctly.
+
+## What To Do Next
+
+- [ ] Test chat and participant list with multiple users (browsers/tabs).
+- [ ] Debug and fix participant count if still incorrect.
+- [ ] Refactor code for clarity and maintainability (optional, after core features work).
+- [ ] Add user-friendly error handling (e.g., for failed connections or room joins).
+- [ ] Implement user authentication (optional, for real-world use).
+- [ ] Add video/audio streaming functionality (if not already done).
+- [ ] Write unit/integration tests for critical logic.
+- [ ] Update documentation (README, setup instructions, usage guide).
+
+---
+
+**If you return after a break:**
+- Review this file for current status and next steps.
+- Check recent git commits for code changes.
+- Start by testing the app with multiple users to verify chat and participant features.
