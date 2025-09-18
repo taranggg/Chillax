@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Users, Video } from 'lucide-react'
+import { Users } from 'lucide-react'
+import glitchLogo from '../assets/glitchlong.png'
 
 const HomePage = ({ onJoinRoom }) => {
   const [roomId, setRoomId] = useState('')
@@ -25,19 +26,18 @@ const HomePage = ({ onJoinRoom }) => {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-      <div className="max-w-md w-full mx-6">
-        <div className="text-center mb-8">
-          <div className="flex justify-center items-center mb-4">
-            <Video className="w-12 h-12 text-purple-400 mr-3" />
-            <h1 className="text-4xl font-bold text-white">Chill Together</h1>
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-950 via-purple-950/85 to-indigo-900 px-4 py-10">
+      <div className="max-w-md w-full mx-6 space-y-8">
+        <div className="text-center space-y-4">
+          <div className="flex justify-center items-center">
+            <img src={glitchLogo} alt="Glitchy" className="h-16 w-auto drop-shadow-[0_20px_45px_rgba(168,85,247,0.55)]" />
           </div>
-          <p className="text-gray-300">
-            Watch videos, chat, and video call with friends in sync!
+          <p className="text-gray-200 text-base leading-relaxed">
+            Stream YouTube links, local videos, and voice/video chat — all in perfect sync with your crew.
           </p>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 shadow-xl">
+        <div className="bg-white/10 backdrop-blur-2xl rounded-3xl p-6 shadow-[0_25px_70px_rgba(59,7,100,0.45)] border border-white/15">
           {/* Create Room Section */}
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-white mb-3">Create a Room</h2>

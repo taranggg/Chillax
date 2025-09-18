@@ -1,9 +1,10 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import ReactPlayer from 'react-player'
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Maximize2, Minimize2 } from 'lucide-react'
 
 const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
   const playerRef = useRef(null)
+  const containerRef = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(true)
   const [progress, setProgress] = useState(0)
@@ -11,15 +12,39 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
   const [seeking, setSeeking] = useState(false)
   const [volume, setVolume] = useState(0.8)
   const [isReady, setIsReady] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   // Track if we should ignore the next play/pause (to prevent loops)
   const ignoringRemoteUpdate = useRef(false)
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
 
   useEffect(() => {
     setIsReady(false)
     setDuration(0)
     setProgress(0)
   }, [url])
+
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return
+
+    if (document.fullscreenElement === containerRef.current) {
+      document.exitFullscreen?.()
+    } else {
+      containerRef.current.requestFullscreen?.().catch((error) => {
+        console.error('Failed to enter fullscreen:', error)
+      })
+    }
+  }, [])
 
   // Listen for remote video actions from other participants
   useEffect(() => {
@@ -124,6 +149,7 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
 
     const newPlaying = !playing
     setPlaying(newPlaying)
+    setIsReady(true)
     
     if (newPlaying) {
       onVideoAction('play', { currentTime: progress * duration })
@@ -185,10 +211,11 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
       currentTime, 
       playing 
     })
+    setIsReady(true)
   }
 
   return (
-    <div className="relative w-full h-full bg-black flex items-center justify-center">
+    <div ref={containerRef} className="relative w-full h-full bg-black flex items-center justify-center">
       {/* React Player */}
       {url ? (
         <ReactPlayer
@@ -249,7 +276,7 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
       )}
 
       {/* Modern Custom Controls Overlay */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 md:p-8">
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 md:p-8">
         {/* Progress Bar */}
         <div className="mb-6">
           <input
@@ -319,7 +346,20 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
             >
               Sync All
             </button>
-            
+
+            <button
+              onClick={toggleFullscreen}
+              type="button"
+              className="p-3 md:p-4 bg-gray-700/70 hover:bg-gray-600 text-white rounded-full transition-colors shadow-md"
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-5 h-5 md:w-6 md:h-6" />
+              ) : (
+                <Maximize2 className="w-5 h-5 md:w-6 md:h-6" />
+              )}
+            </button>
+
             {/* Video Quality Info */}
             {url && (
               <div className="hidden lg:flex items-center space-x-2 text-sm text-gray-400">
