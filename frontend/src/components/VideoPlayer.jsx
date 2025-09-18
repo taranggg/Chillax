@@ -88,6 +88,15 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
     if (!seeking) {
       setProgress(state.played)
     }
+
+    const playerDuration = playerRef.current?.getDuration?.()
+    if (
+      playerDuration &&
+      !Number.isNaN(playerDuration) &&
+      Math.abs(playerDuration - duration) > 0.25
+    ) {
+      setDuration(playerDuration)
+    }
   }
 
   // Handle seek
@@ -138,12 +147,6 @@ const VideoPlayer = ({ url, socket, roomId, onVideoAction }) => {
           width="100%"
           height="100%"
           onProgress={handleProgress}
-          onReady={() => {
-            const playerDuration = playerRef.current?.getDuration?.() ?? 0
-            if (!Number.isNaN(playerDuration)) {
-              setDuration(playerDuration)
-            }
-          }}
           onPlay={() => {
             if (!ignoringRemoteUpdate.current) {
               setPlaying(true)

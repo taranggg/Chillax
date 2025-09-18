@@ -8,8 +8,12 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
   const [messages, setMessages] = useState([])
   const [isConnected, setIsConnected] = useState(false)
   const [hasShownConnectionError, setHasShownConnectionError] = useState(false)
-  const [roomCreated, setRoomCreated] = useState(false)
   const currentUserRef = useRef(null)
+  const roomCreatedRef = useRef(false)
+
+  useEffect(() => {
+    roomCreatedRef.current = false
+  }, [roomId])
 
   useEffect(() => {
     if (!roomId) return
@@ -19,14 +23,97 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
       transports: ['websocket', 'polling']
     })
 
+    const setInitialRoomState = (roomData, userId) => {
+      if (!roomData) return
+
+      if (Array.isArray(roomData.participants)) {
+        setParticipants(roomData.participants.map(participant => ({
+          ...participant,
+          isYou: participant.id === userId,
+          isOnline: participant.isOnline ?? true,
+          audioEnabled: participant.audioEnabled ?? false,
+          videoEnabled: participant.videoEnabled ?? false
+        })))
+      }
+
+      if (Array.isArray(roomData.messages)) {
+        setMessages(roomData.messages.map(message => ({
+          id: message.id ?? `${message.userId}-${Date.now()}`,
+          text: message.content ?? message.text ?? '',
+          userId: message.userId ?? 'system',
+          userName: message.userName ?? 'System',
+          timestamp: message.timestamp ? new Date(message.timestamp).getTime() : Date.now(),
+          type: message.type ?? (message.userId ? 'user' : 'system')
+        })))
+      }
+    }
+
     newSocket.on('connect', () => {
       console.log('Connected to server with socket ID:', newSocket.id)
+      setIsConnected(true)
+      setHasShownConnectionError(false)
+
       // Set current user after socket connects
       const userName = `User${Math.floor(Math.random() * 1000)}`
       currentUserRef.current = { id: newSocket.id, name: userName }
       
-      // Join the room
-      newSocket.emit('join-room', { roomId, userId: newSocket.id, userName })
+      const handleCreateRoomResponse = (response) => {
+        if (response?.success) {
+          roomCreatedRef.current = true
+          setInitialRoomState(response.room, newSocket.id)
+        } else {
+          console.error('Failed to create room:', response?.error)
+          setMessages(prev => [...prev, {
+            id: 'error-' + Date.now(),
+            userId: 'system',
+            userName: 'System',
+            content: response?.error || 'Failed to create room.',
+            text: response?.error || 'Failed to create room.',
+            timestamp: Date.now(),
+            type: 'error'
+          }])
+        }
+      }
+
+      const attemptJoinRoom = () => {
+        newSocket.emit('join-room', { roomId, userId: newSocket.id, userName }, (response) => {
+          if (response?.success) {
+            setInitialRoomState(response.room, newSocket.id)
+          } else if (response?.error) {
+            console.error('Failed to join room:', response.error)
+
+            // If the room was supposed to be created by us but disappeared, re-create it
+            if (shouldCreateRoom && !roomCreatedRef.current) {
+              newSocket.emit('create-room', { roomId, name: userName }, handleCreateRoomResponse)
+              return
+            }
+
+            setMessages(prev => [...prev, {
+              id: 'error-' + Date.now(),
+              userId: 'system',
+              userName: 'System',
+              content: response.error,
+              text: response.error,
+              timestamp: Date.now(),
+              type: 'error'
+            }])
+          }
+        })
+      }
+
+      if (shouldCreateRoom && !roomCreatedRef.current) {
+        newSocket.emit('create-room', { roomId, name: userName }, (response) => {
+          if (response?.error === 'Room ID already exists') {
+            roomCreatedRef.current = true
+            attemptJoinRoom()
+            return
+          }
+
+          handleCreateRoomResponse(response)
+        })
+      } else {
+        attemptJoinRoom()
+      }
     })
 
     newSocket.on('disconnect', () => {
@@ -104,16 +191,20 @@ export const useSocket = (roomId, shouldCreateRoom = false) => {
     newSocket.on('new-message', (data) => {
       console.log('Received message:', data) // Debug log
       console.log('Current user ID:', currentUserRef.current?.id) // Debug log
-      
+
+      const resolvedTimestamp = data.timestamp 
+        ? new Date(data.timestamp).getTime()
+        : Date.now()
+
       // Only add messages from other users, not our own (we add those immediately when sending)
       if (data.userId !== currentUserRef.current?.id) {
         setMessages(prev => [...prev, {
           id: data.id || Date.now(),
-          text: data.content,
+          text: data.content ?? data.text ?? '',
           userId: data.userId,
           userName: data.userName,
-          timestamp: data.timestamp || Date.now(),
-          type: 'user'
+          timestamp: resolvedTimestamp,
+          type: data.type ?? 'user'
         }])
       }
     })
